@@ -619,7 +619,12 @@ html[data-lang="both"] .cloud .en{display:block;margin-left:0}
           <div class="card-h" style="border-bottom-color:var(--ink)"><h3 class="display bi" data-t="FRR 结果|FRR result"></h3></div>
           <div class="res-b">
             <div id="emgRes" aria-live="polite"></div>
-            <div class="btn-row" style="margin-top:18px">
+            <div class="fields" style="padding:16px 0 0">
+              <div class="fld"><label for="emgPid" class="bi-i" data-t="这份肌电属于哪位受试者|Which participant"></label><select id="emgPid" class="mono"></select></div>
+              <div class="fld"><label for="emgTpSel" class="bi-i" data-t="时间点|Timepoint"></label><select id="emgTpSel"></select></div>
+            </div>
+            <p class="note" id="emgTgtNote" style="margin:8px 0 0"></p>
+            <div class="btn-row" style="margin-top:14px">
               <button class="btn primary" type="button" id="emgAdopt" data-act="emgAdopt"><span class="bi-i" data-t="写入评估信息|Write to assessment"></span></button>
               <button class="btn" type="button" data-act="emgImage"><span class="bi-i" data-t="生成可保存的图片|Make a savable image"></span></button>
             </div>
@@ -3952,7 +3957,7 @@ function syncEmgInputs(){
   var o='';for(i=0;i<c.N;i++)o+='<option value="'+i+'">'+esc(lang3('第 '+(i+1)+' 次','Cycle '+(i+1)))+'</option>';
   var cs=$('#emgCyc');cs.innerHTML=o;cs.value=String(emg.active);
   $('#emgCycWrap').hidden=c.N<2;
-  $('#emgFsHint').innerHTML=c.time<0?'<b class="warn">'+B('没有时间列：现在按 '+r2(emg.fs)+' Hz 计算，总时长 '+r2(emg.n/emg.fs)+' 秒。如果和实际不符，请在下面填录制总时长。','No time column: using '+r2(emg.fs)+' Hz, total '+r2(emg.n/emg.fs)+' s. If that is wrong, enter the total recording time below.')+'</b>':B('由时间列自动估算，可手动修改。','Estimated from the time column. You can edit it.');
+  $('#emgFsHint').innerHTML=c.time<0?'<b class="warn">'+((emg.idxCols||[]).length?B('第 '+emg.idxCols.map(function(i){return i+1}).join('、')+' 列是帧序号，不是时间。','Column '+emg.idxCols.map(function(i){return i+1}).join(', ')+' is a frame counter, not time. '):'')+B('没有时间列：现在按 '+r2(emg.fs)+' Hz 计算，总时长 '+r2(emg.n/emg.fs)+' 秒。如果和实际不符，请在下面填录制总时长。','No time column: using '+r2(emg.fs)+' Hz, total '+r2(emg.n/emg.fs)+' s. If that is wrong, enter the total recording time below.')+'</b>':B('由时间列自动估算，可手动修改。','Estimated from the time column. You can edit it.');
   $('#emgMode').value=c.mode;$('#schedFields').hidden=!sched;
   $('#emgT0').value=String(r2(c.t0));$('#emgS').value=String(c.S);$('#emgF').value=String(c.F);$('#emgH').value=String(c.H);$('#emgE').value=String(c.E);$('#emgEdge').value=String(c.edge);
   $('#emgA').disabled=sched;$('#emgB').disabled=sched;$('#emgRs').disabled=sched;$('#emgRe').disabled=sched;
@@ -3961,11 +3966,19 @@ function syncEmgInputs(){
   $('#emgNHint').innerHTML=sched?B('从起点起每 '+r2(L)+' 秒算一个循环。','One cycle every '+r2(L)+' s from the start.'):B('把分析起止之间等分成对应段数，每段找一个松弛段。','The analysis range is split into equal parts, one rest window in each.');
   $('#emgPlotNote').innerHTML=sched?B('阴影是按时间表算出的保持期（已去掉两端过渡）。如果和波形对不上，请修改“循环起点”，或点“自动对齐起点”。','The shading is the hold from the schedule (ends trimmed). If it does not match the waveform, change the cycle start or tap Auto-align start.'):B('拖动顶部的把手，调整松弛段（全屈曲静息段）。多次循环时，拖到哪个把手就调整哪一次。也可以在下面输入具体秒数。','Drag the handles at the top to set the relaxation window (full-flexion silent phase). With several cycles, the handle you drag selects that cycle. You can also type exact seconds below.');
 }
+function isIndexCol(col,name){
+  if(!isTimeCol(col))return false;
+  if(/frame|帧|sample|index|序号|编号|^no\.?$|^#$|^n$/i.test(String(name||'').trim()))return true;
+  if(medianDt(col)!==1)return false;
+  for(var i=0;i<Math.min(col.length,300);i++)if(col[i]!==Math.round(col[i]))return false;
+  return true;
+}
 function autoMap(){
-  var c=emg.cfg,nm=emg.names,i;
+  var c=emg.cfg,nm=emg.names,i,idx=[];
   c.time=-1;
-  for(i=0;i<emg.cols.length;i++){if(isTimeCol(emg.cols[i])){c.time=i;break}}
-  var cand=[];for(i=0;i<emg.cols.length;i++)if(i!==c.time)cand.push(i);
+  for(i=0;i<emg.cols.length;i++){if(isIndexCol(emg.cols[i],nm[i])){idx.push(i);continue}if(c.time<0&&isTimeCol(emg.cols[i]))c.time=i}
+  emg.idxCols=idx;
+  var cand=[];for(i=0;i<emg.cols.length;i++)if(i!==c.time&&idx.indexOf(i)<0)cand.push(i);
   var Lre=/left|左|(^|[^a-z])l([^a-z]|$)/i,Rre=/right|右|(^|[^a-z])r([^a-z]|$)/i;
   c.L=-1;c.R=-1;
   cand.forEach(function(j){if(c.L<0&&Lre.test(nm[j]))c.L=j;else if(c.R<0&&Rre.test(nm[j]))c.R=j});
@@ -4285,6 +4298,7 @@ actions.emgAlign=function(){
   else{emg.cfg.t0=t0;toast(B('没有找到合适的起点，请手动输入。','No suitable start found. Enter it manually.'))}
 };
 actions.emgImage=emgImage;
+document.addEventListener('click',function(e){var b=e.target&&e.target.closest&&e.target.closest('#t-emg');if(b)setTimeout(frrTargetFill,0)});
 actions.emgAdopt=function(){
   if(emg.synthetic)return;
   var c=emg.cfg,zh=[],en=[],mL=emg.mean.L,mR=emg.mean.R;
@@ -4301,6 +4315,82 @@ actions.emgAdopt=function(){
   $('#emgAdoptNote').innerHTML=B('已写入评估信息：'+zh.join('，')+(c.N>1?'（'+c.N+' 次平均）':'')+'。提交这位受试者的评估时会一并保存。','Written to the assessment: '+en.join(', ')+(c.N>1?' ('+c.N+'-cycle mean)':'')+'. It is saved when you submit this assessment.');
   toast(B('FRR 已写入评估信息。','FRR written to the assessment.'));
 };
+
+/* ---------- FRR target: which participant and timepoint the result is written to ---------- */
+function frrTargetFill(){
+  var ps=$('#emgPid'),ts=$('#emgTpSel');if(!ps||!ts)return;
+  var cur=ps.value||state.id||'',ct=ts.value||state.tp||'baseline';
+  var ids=participants.map(function(p){return p.id});
+  records.forEach(function(r){if(ids.indexOf(r.id)<0)ids.push(r.id)});
+  if(state.id&&ids.indexOf(state.id)<0)ids.unshift(state.id);
+  ps.innerHTML='<option value="">'+esc(lang3('— 选择编号 —','— choose ID —'))+'</option>'+ids.map(function(id){return '<option value="'+esc(id)+'">'+esc(id)+'</option>'}).join('');
+  ps.value=ids.indexOf(cur)>=0?cur:'';
+  ts.innerHTML=Object.keys(TP).map(function(k){return '<option value="'+k+'">'+esc(lang3(TP[k].zh,TP[k].en))+'</option>'}).join('');
+  ts.value=TP[ct]?ct:'baseline';
+  frrTargetNote();
+}
+function f2(v){return v===null||v===undefined||v===''||!isFinite(+v)?'—':(+v).toFixed(2)}
+function frrRec(id,tp){return records.filter(function(x){return x.id===id&&x.tp===tp})[0]||null}
+function frrTargetNote(){
+  var el=$('#emgTgtNote');if(!el)return;
+  var id=$('#emgPid').value,tp=$('#emgTpSel').value,r=frrRec(id,tp);
+  if(!id){el.innerHTML='<span class="warn">'+B('先选这份肌电属于哪位受试者、哪个时间点。','First choose the participant and timepoint for this EMG.')+'</span>';return}
+  var had=r&&((r.frrL!==null&&r.frrL!==undefined)||(r.frrR!==null&&r.frrR!==undefined));
+  el.innerHTML=r?B('会写进 '+esc(id)+' 已保存的「'+TP[tp].zh+'」记录'+(had?'，<b>替换原来的 FRR</b>（左 '+f2(r.frrL)+'，右 '+f2(r.frrR)+'）':'')+'。','Goes into the saved '+TP[tp].en+' record of '+esc(id)+(had?', <b>replacing its FRR</b> (L '+f2(r.frrL)+', R '+f2(r.frrR)+')':'')+'.')
+    :state.id===id&&state.tp===tp?B('会写进正在填写的 '+esc(id)+' 评估，提交评估时一起保存。','Goes into the assessment in progress for '+esc(id)+'; saved when you submit it.')
+    :B(esc(id)+' 还没有「'+TP[tp].zh+'」记录：会为他/她开始一份评估并先填好 FRR，问卷之后再填、再提交。',esc(id)+' has no '+TP[tp].en+' record yet: an assessment is started with the FRR filled in; complete the questionnaires and submit later.');
+}
+function frrCompute(){
+  var c=emg.cfg,mL=emg.mean.L,mR=emg.mean.R,o={L:null,R:null,zh:[],en:[]};
+  if(mL!==null&&mL!==undefined){o.L=+mL.toFixed(2);o.zh.push('左 '+o.L.toFixed(2));o.en.push('Left '+o.L.toFixed(2))}
+  if(mR!==null&&mR!==undefined){o.R=+mR.toFixed(2);o.zh.push('右 '+o.R.toFixed(2));o.en.push('Right '+o.R.toFixed(2))}
+  var cyc=function(k){return (emg.res[k]||[]).map(function(r){return r&&r.frr!==null?r2(r.frr):null})};
+  var nd=function(k,f){return (emg.res[k]||[]).map(function(r){var v=r?r[f]:null;return v!==null&&v!==undefined&&isFinite(v)?+v.toPrecision(4):null})};
+  o.meta={method:'peak-1s-flexion/min-1s-fullflexion-rest',mode:c.mode,rmsMs:100,fs:r2(emg.fs),type:c.type,hp:c.hp,notch:c.notch,wSec:c.W,cycles:c.N,file:emg.name,
+    sched:c.mode==='sched'?{t0:r2(c.t0),stand:c.S,flex:c.F,hold:c.H,ret:c.E,trim:r2(emg.schedEdge)}:null,
+    rangeSec:[r2(c.a),r2(c.b)],relaxSec:emg.cyc.map(function(cy){return [r2(cy.rs),r2(cy.re)]}),frrL:cyc('L'),frrR:cyc('R'),
+    numL:nd('L','num'),denL:nd('L','den'),numR:nd('R','num'),denR:nd('R','den'),at:Date.now()};
+  return o;
+}
+function draftBusy(){return !!(state.id&&(state.vas!==''||state.odi.some(function(v){return v!==null})||state.tsk.some(function(v){return v!==null})))}
+actions.emgAdopt=function(){
+  if(emg.synthetic)return;
+  var id=$('#emgPid').value,tp=$('#emgTpSel').value;
+  if(!id){toast(B('请先选这份肌电属于哪位受试者。','Choose the participant first.'));$('#emgPid').focus();frrTargetNote();return}
+  var o=frrCompute();if(o.L===null&&o.R===null)return;
+  var c=emg.cfg,tz=c.N>1?'（'+c.N+' 次平均）':'',te=c.N>1?' ('+c.N+'-cycle mean)':'';
+  var done=function(where){
+    $('#emgAdoptNote').innerHTML=B('已写入 '+esc(id)+' · '+TP[tp].zh+where[0]+'：'+o.zh.join('，')+tz+'。','Written to '+esc(id)+' · '+TP[tp].en+where[1]+': '+o.en.join(', ')+te+'.');
+    toast(B('FRR 已写入 '+esc(id)+' · '+TP[tp].zh+'。','FRR written to '+esc(id)+' · '+TP[tp].en+'.'));
+    frrTargetNote();
+  };
+  var r=frrRec(id,tp);
+  if(r){
+    snapshot('overwrite');
+    if(o.L!==null)r.frrL=o.L;if(o.R!==null)r.frrR=o.R;r.emgMeta=o.meta;r.saved=Date.now();
+    if(state.id===id&&state.tp===tp){if(o.L!==null)state.frrL=o.L.toFixed(2);if(o.R!==null)state.frrR=o.R.toFixed(2);state.emgMeta=o.meta;fillInfo();update()}
+    persist();renderRecords();safeRender();parRender();
+    done(['（已保存的记录）',' (saved record)']);return;
+  }
+  var write=function(){
+    if(!(state.id===id&&state.tp===tp)){
+      state.id=id;state.tp=tp;state.date=today();state.vas='';state.vasSrc='';state.odi=Array(10).fill(null);state.tsk=Array(11).fill(null);
+      syncInputs();
+    }
+    state.frrL=o.L===null?'':o.L.toFixed(2);state.frrR=o.R===null?'':o.R.toFixed(2);state.emgMeta=o.meta;
+    fillInfo();update();saveDraft();
+    done(['（正在填写的评估，提交时保存）',' (assessment in progress, saved on submit)']);
+  };
+  if(!(state.id===id&&state.tp===tp)&&draftBusy()){
+    ask({title:B('换成 '+esc(id)+' 的评估？','Switch to '+esc(id)+'?'),body:'<p class="warn">'+B('正在填写的 <b class="mono">'+esc(state.id)+'</b> 评估还没提交，继续会被清掉。','The assessment in progress for <b class="mono">'+esc(state.id)+'</b> has not been submitted and will be cleared.')+'</p>',
+      buttons:[{v:'cancel',kind:'primary',label:B('先不换','Keep it')},{v:'ok',kind:'danger',label:B('清掉并写入','Clear and write')}]}).then(function(q){if(q.v==='ok')write()});
+    return;
+  }
+  write();
+};
+document.addEventListener('change',function(e){var t=e.target&&e.target.id;if(t==='emgPid'||t==='emgTpSel')frrTargetNote()});
+var _emgLoad0=emgLoad;
+emgLoad=function(){_emgLoad0.apply(this,arguments);frrTargetFill()};
 
 /* share */
 function shareLink(){return (prefs.shareUrl||SHARE_URL).trim()}
